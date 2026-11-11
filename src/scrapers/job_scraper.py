@@ -1,41 +1,47 @@
 import os
+from urllib.parse import urlparse
+
 import requests
 from dotenv import load_dotenv
-from src.database.db import job_exists, save_job
+
+from src.database.db import job_exists
 
 load_dotenv()
 
-JOOBLE_API_KEY = os.getenv("JOOBLE_API_KEY")
 
+def fetch_filtered_jobs() -> list[dict[str, str]]:
+    """Obtiene de Jooble ofertas nuevas que coinciden con el perfil."""
+    api_key = os.getenv("JOOBLE_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "JOOBLE_API_KEY no está configurada. "
+            "Añádela como secreto de GitHub Actions o en .env."
+        )
 
-def fetch_filtered_jobs():
-  """Consulta la API de Jooble, filtra por tecnologías clave de tu perfil
-
-  y descarta las que ya estén registradas en Supabase.
-  """
-  print("🔍 Consultando ofertas en la API de Jooble...")
-
-  url = f"https://jooble.org/api/{JOOBLE_API_KEY}"
-
-  # Puedes personalizar el puesto y la ubicación según lo que busques
-  payload = {
-      "keywords": "Python OR React OR .NET OR Full Stack OR FastAPI OR Azure OR TypeScript OR Fullstack OR Desarrollador OR Power Platform OR Power Apps OR Power Automate OR Software",
-      "location": "Colombia O Remote",  # O puedes cambiarlo a "Remote"
-      "radius": "50",
-  }
-
-  try:
-    response = requests.post(url, json=payload)
-    if response.status_code != 200:
-      print(f"Error en la API de Jooble: {response.status_code}")
-      return []
+    print("Consultando ofertas en la API de Jooble...")
+    response = requests.post(
+        f"https://jooble.org/api/{api_key}",
+        json={
+            "keywords": (
+                "Python OR React OR .NET OR Full Stack OR FastAPI OR Azure OR "
+                "TypeScript OR Fullstack OR Desarrollador OR Power Platform OR "
+                "Power Apps OR Power Automate OR Software"
+            ),
+            "location": "Colombia O Remote",
+            "radius": "50",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
 
     data = response.json()
+    if not isinstance(data, dict) or not isinstance(data.get("jobs", []), list):
+        raise ValueError("Jooble devolvió una respuesta con un formato inesperado.")
+
     raw_jobs = data.get("jobs", [])
+    print(f"Jooble devolvió {len(raw_jobs)} ofertas.")
 
-    print(f"Total de ofertas devueltas por la API: {len(raw_jobs)}")
-
-    target_keywords = [
+    target_keywords = (
         "python",
         "react",
         "fastapi",
@@ -44,43 +50,39 @@ def fetch_filtered_jobs():
         "full stack",
         "fullstack",
         "typescript",
-    ]
-    new_filtered_jobs = []
+    )
+    filtered_jobs: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
 
     for job in raw_jobs:
-      title = job.get("title", "")
-      snippet = job.get(
-          "snippet", ""
-      )  # Pequeña descripción de la oferta
-      job_url = job.get("link", "")
-      company = job.get("company", "Empresa Confidencial")
-      location = job.get("location", "Colombia")
+        if not isinstance(job, dict):
+            continue
 
-      # Evitar procesar si falta el link
-      if not job_url:
-        continue
+        title = str(job.get("title") or "").strip()
+        snippet = str(job.get("snippet") or "").strip()
+        job_url = str(job.get("link") or "").strip()
+        if not title or not job_url or job_url in seen_urls:
+            continue
+        parsed_url = urlparse(job_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            continue
 
-      # 1. Verificar si ya existe en Supabase (Control de Duplicados)
-      if job_exists(job_url):
-        continue  # Si ya fue enviada antes, la saltamos
+        text_to_check = f"{title} {snippet}".casefold()
+        if not any(keyword in text_to_check for keyword in target_keywords):
+            continue
+        if job_exists(job_url):
+            continue
 
-      # 2. Filtrado inteligente por palabras clave en el título o descripción
-      text_to_check = (title + " " + snippet).lower()
-      if any(keyword in text_to_check for keyword in target_keywords):
-        job_cleaned = {
-            "title": title,
-            "company": company,
-            "location": location,
-            "url": job_url,
-        }
-        new_filtered_jobs.append(job_cleaned)
+        seen_urls.add(job_url)
+        filtered_jobs.append(
+            {
+                "title": title,
+                "company": str(job.get("company") or "Empresa Confidencial").strip(),
+                "location": str(job.get("location") or "Colombia").strip(),
+                "url": job_url,
+                "snippet": snippet,
+            }
+        )
 
-        # Guardar inmediatamente en Supabase para marcarla como vista
-        save_job(title=title, company=company, url=job_url)
-
-    print(f"Ofertas nuevas y filtradas listas para enviar: {len(new_filtered_jobs)}")
-    return new_filtered_jobs
-
-  except Exception as e:
-    print(f"Excepción conectando con Jooble: {e}")
-    return []
+    print(f"Ofertas nuevas y filtradas: {len(filtered_jobs)}")
+    return filtered_jobs
