@@ -1,18 +1,68 @@
-﻿# 🤖 AI Job Hunter & ATS Optimizer
+# AI Job Hunter
 
-Agente automatizado para la búsqueda de ofertas laborales tecnológicas (Python, React, .NET, Azure), diseñado para ejecutarse de forma gratuita mediante GitHub Actions y notificar a Telegram con opciones interactivas para adaptar el currículum (ATS) usando inteligencia artificial (Google Gemini).
+Busca ofertas de empleo tecnológico con la API de Jooble y envía a Telegram
+una alerta con los datos principales y el enlace directo para postularte.
+Esta versión **no adapta el CV ni genera cartas o PDF**.
 
-## 🚀 Características
-- **Búsqueda Automatizada:** Conectado a la API de Jooble para filtrar vacantes de valor.
-- **Control de Duplicados:** Almacenamiento y validación en Supabase para evitar alertas repetidas.
-- **Optimización ATS con IA:** Utiliza Google Gemini para adaptar tu CV maestro a cada oferta específica.
-- **Generación de PDF:** Convierte el CV optimizado en un documento formal y estilizado listo para postularte.
-- **Notificaciones Interactivas:** Alertas directas a Telegram con botones de acción rápida.
+## Flujo automático
 
-## 🛠️ Tecnologías
-- Python, Requests, BeautifulSoup
-- Supabase (Database)
-- Google Generative AI (Gemini)
-- WeasyPrint (Generación de PDF)
-- Telegram Bot API
-- GitHub Actions (Infraestructura Serverless gratuita)
+GitHub Actions ejecuta la búsqueda diariamente a las 8:00 a. m. de Colombia
+(13:00 UTC). El workflow funciona en los servidores de GitHub: tu computadora
+no necesita estar encendida. También puedes iniciar una ejecución manual desde
+**Actions → Daily Job Hunter → Run workflow**.
+
+El schedule debe estar en la rama predeterminada del repositorio y Actions debe
+estar habilitado. GitHub puede retrasar los schedules, así que la hora es
+orientativa. El uso gratuito depende del plan y de los límites de Actions,
+Jooble y Supabase.
+
+## Configuración
+
+### GitHub Actions
+
+En **Settings → Secrets and variables → Actions**, configura estos *repository
+secrets*:
+
+| Secreto | Uso |
+| --- | --- |
+| `JOOBLE_API_KEY` | Consultar ofertas en Jooble |
+| `TELEGRAM_TOKEN` | Enviar alertas con el bot |
+| `CHAT_ID` | Chat que recibirá las alertas |
+| `SUPABASE_URL` | URL del proyecto Supabase |
+| `SUPABASE_KEY` | Clave de Supabase con acceso a `jobs_sent` |
+
+El workflow está en
+[`job_hunter.yml`](./.github/workflows/job_hunter.yml).
+
+### Supabase
+
+La tabla inicial `jobs_sent` debe tener `id`, `title`, `company`, `url` y
+`created_at`. Ejecuta una sola vez en el SQL Editor de Supabase la
+[migración](./supabase/migrations/20261105_add_job_delivery_details.sql). Añade
+los campos de ubicación, descripción y estado que el scraper utiliza para
+controlar los envíos y deja las ofertas existentes marcadas como enviadas.
+
+La clave configurada en `SUPABASE_KEY` debe tener permisos de lectura,
+inserción y actualización sobre `jobs_sent`. No publiques esa clave.
+
+## Prueba local
+
+Copia `.env.example` a `.env` y completa sus variables. No subas `.env` al
+repositorio. En PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m src.bot.bot
+```
+
+## Más adelante: adaptar el CV
+
+La plantilla `templates/cv_base.md` se conserva como referencia, pero el scraper
+y este workflow no la leen ni la envían a ningún servicio. La automatización
+para entregar un CV adaptado se diseñará aparte.
+
+## Tecnologías
+
+Python, Jooble API, Supabase, Telegram Bot API y GitHub Actions.
