@@ -45,6 +45,61 @@ class FetchFilteredJobsTests(unittest.TestCase):
         response.raise_for_status.assert_called_once_with()
         post.assert_called_once()
 
+    @patch.dict(os.environ, {"JOOBLE_API_KEY": "test-key"})
+    @patch("src.scrapers.job_scraper.job_exists", return_value=False)
+    @patch("src.scrapers.job_scraper.requests.post")
+    def test_keeps_remote_or_medellin_jobs_without_explicit_english_requirements(
+        self, post: Mock, job_exists: Mock
+    ) -> None:
+        response = Mock()
+        response.json.return_value = {
+            "jobs": [
+                {
+                    "title": "Desarrollador Python",
+                    "location": "Colombia",
+                    "link": "https://jobs.example/remote",
+                    "snippet": "Trabajo remoto. Desarrollo de APIs.",
+                },
+                {
+                    "title": "Desarrollador Python",
+                    "location": "Medellín, Colombia",
+                    "link": "https://jobs.example/medellin",
+                    "snippet": "Trabajo presencial en oficina.",
+                },
+                {
+                    "title": "Desarrollador Python",
+                    "location": "Bogotá, Colombia",
+                    "link": "https://jobs.example/onsite",
+                    "snippet": "Trabajo presencial en oficina.",
+                },
+                {
+                    "title": "Desarrollador Python",
+                    "location": "Cali, Colombia",
+                    "link": "https://jobs.example/cali",
+                    "snippet": "Trabajo presencial en oficina.",
+                },
+                {
+                    "title": "Python Developer",
+                    "location": "Remote",
+                    "link": "https://jobs.example/english",
+                    "snippet": "Fluent English required.",
+                },
+            ]
+        }
+        post.return_value = response
+
+        jobs = fetch_filtered_jobs()
+
+        self.assertEqual(
+            [job["url"] for job in jobs],
+            ["https://jobs.example/remote", "https://jobs.example/medellin"],
+        )
+        self.assertEqual(
+            [call.args[0] for call in job_exists.call_args_list],
+            ["https://jobs.example/remote", "https://jobs.example/medellin"],
+        )
+        self.assertEqual(post.call_args.kwargs["json"]["location"], "Colombia")
+
     @patch.dict(os.environ, {"JOOBLE_API_KEY": ""})
     @patch("src.scrapers.job_scraper.requests.post")
     def test_requires_api_key(self, post: Mock) -> None:

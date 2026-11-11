@@ -1,8 +1,15 @@
 # AI Job Hunter
 
-Busca ofertas de empleo tecnológico con la API de Jooble y envía a Telegram
-una alerta con los datos principales y el enlace directo para postularte.
+Busca ofertas de empleo tecnológico en Colombia con la API de Jooble y envía a
+Telegram alertas de vacantes remotas o ubicadas en Medellín, sin requisitos
+explícitos de inglés, junto con el enlace directo para postularte. Así, las
+ofertas presenciales fuera de Medellín se descartan.
 Esta versión **no adapta el CV ni genera cartas o PDF**.
+
+Jooble agrega ofertas de distintas fuentes; este proyecto consulta Jooble y no
+integra directamente LinkedIn, Computrabajo, Indeed ni Magneto. Los filtros de
+modalidad e inglés se basan en el texto que Jooble devuelve y pueden omitir una
+oferta remota o no detectar un requisito redactado de otra forma.
 
 ## Flujo automático
 

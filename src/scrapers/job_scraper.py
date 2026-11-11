@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 from urllib.parse import urlparse
 
 import requests
@@ -7,6 +9,38 @@ from dotenv import load_dotenv
 from src.database.db import job_exists
 
 load_dotenv()
+
+REMOTE_WORK_PATTERN = re.compile(
+    r"\b(remote|remoto|remota|teletrabajo|home office|"
+    r"work from home|trabajo desde casa|trabajo remoto)\b"
+)
+ENGLISH_REQUIREMENT_TERMS = (
+    "english required",
+    "required english",
+    "fluent english",
+    "advanced english",
+    "intermediate english",
+    "conversational english",
+    "english proficiency",
+    "english level",
+    "ingles requerido",
+    "ingles avanzado",
+    "ingles intermedio",
+    "ingles conversacional",
+    "ingles fluido",
+    "nivel de ingles",
+    "dominio del ingles",
+    "bilingue",
+    "b2 english",
+    "c1 english",
+    "b2 de ingles",
+    "c1 de ingles",
+)
+
+
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(char for char in normalized if not unicodedata.combining(char))
 
 
 def fetch_filtered_jobs() -> list[dict[str, str]]:
@@ -27,8 +61,7 @@ def fetch_filtered_jobs() -> list[dict[str, str]]:
                 "TypeScript OR Fullstack OR Desarrollador OR Power Platform OR "
                 "Power Apps OR Power Automate OR Software"
             ),
-            "location": "Colombia O Remote",
-            "radius": "50",
+            "location": "Colombia",
         },
         timeout=30,
     )
@@ -70,6 +103,15 @@ def fetch_filtered_jobs() -> list[dict[str, str]]:
         text_to_check = f"{title} {snippet}".casefold()
         if not any(keyword in text_to_check for keyword in target_keywords):
             continue
+        location = str(job.get("location") or "").strip()
+        normalized_location = _normalize_text(location)
+        remote_text = _normalize_text(f"{title} {location} {snippet}")
+        is_remote = bool(REMOTE_WORK_PATTERN.search(remote_text))
+        is_in_medellin = bool(re.search(r"\bmedellin\b", normalized_location))
+        if not is_remote and not is_in_medellin:
+            continue
+        if any(term in remote_text for term in ENGLISH_REQUIREMENT_TERMS):
+            continue
         if job_exists(job_url):
             continue
 
@@ -78,7 +120,7 @@ def fetch_filtered_jobs() -> list[dict[str, str]]:
             {
                 "title": title,
                 "company": str(job.get("company") or "Empresa Confidencial").strip(),
-                "location": str(job.get("location") or "Colombia").strip(),
+                "location": location or "Remoto desde Colombia",
                 "url": job_url,
                 "snippet": snippet,
             }
