@@ -1,0 +1,12 @@
+# Archivos de entorno y claves secretas
+.env
+
+# Entornos virtuales y caché de Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos generados temporalmente (como los PDFs locales)
+*.pdf
